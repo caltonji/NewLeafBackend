@@ -3,6 +3,7 @@ from flask import g
 from azure.cosmosdb.table.tableservice import TableService
 from twilio.rest import Client
 from azure.storage.blob import BlobServiceClient
+from azure.communication.sms import SmsClient
 
 def get_table_service():
     if 'table_service' not in g:
@@ -16,8 +17,7 @@ def get_blob_service_client():
 
     return g.blob_service_client
 
-def get_twilio_client():
-    if 'twilio_client' not in g:
-        g.twilio_client = Client(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-
-    return g.twilio_client
+def get_sms_client():
+    if 'sms_client' not in g:
+        g.sms_client = SmsClient.from_connection_string(os.environ["COMMUNICATION_SERVICES_CONNECTION_STRING"])
+    return g.sms_client

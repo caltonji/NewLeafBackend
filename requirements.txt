@@ -1,5 +1,6 @@
 az==0.1.0.dev1
 azure-common==1.1.25
+azure-communication-sms==1.0.0b3
 azure-core==1.4.0
 azure-cosmosdb-nspkg==2.0.2
 azure-cosmosdb-table==1.0.6
