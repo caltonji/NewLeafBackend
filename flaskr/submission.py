@@ -1,4 +1,4 @@
-import os, uuid
+import os, uuid, sys
 from flask import (
     Blueprint, request, abort, jsonify
 )
@@ -39,9 +39,31 @@ def upsert_submission():
     }
     table_service = get_table_service()
     table_service.insert_or_replace_entity('submission', submission_to_upload)
-    text_others(request.form['user_id'], request.form['template_id'])
+    text_others(request.form['user_id'], request.form['template_id'], photo_url)
 
     return convert_table_submission_to_json(submission_to_upload)
+
+@bp.route('/chosen_response', methods=['PUT'])
+def set_chosen_response():
+    print("what it is though", file=sys.stderr)
+    validate_request_form(['template_id', 'user_id', 'submission_id', 'response_id'])
+    validate_user_in_template(request.form['user_id'], request.form['template_id'])
+    userId = request.form['user_id']
+    templateId = request.form['template_id']
+    submissionId = request.form['submission_id']
+    responseId = request.form['response_id']
+
+    table_service = get_table_service()
+    submission = table_service.get_entity('submission', templateId, submissionId)
+    if submission['user_id'] != userId:
+        abort(403, description="You cannot edit another users submission")
+    response = table_service.get_entity('response', templateId, responseId)
+    if response['submission_id'] != submissionId:
+        abort(400, description="Response needs to be for this submission")
+    submission["chosen_response"] = responseId
+
+    table_service.insert_or_replace_entity('submission', submission)
+    return None
 
 @bp.route('/submissions', methods=["GET"])
 def get_submissions():
@@ -76,6 +98,39 @@ def get_submissions():
         submission['user'] = user
     return jsonify(submissions)
 
+@bp.route('/submission', methods=["GET"])
+def get_submission():
+    validate_request_args(['template_id', 'user_id', 'submission_id'])
+    userId = request.args['user_id']
+    templateId = request.args['template_id']
+    validate_user_in_template(userId, templateId)
+    submissionId = request.args['submission_id']
+
+    table_service = get_table_service()
+    submission = table_service.get_entity('submission', templateId, submissionId)
+    submission = convert_table_submission_to_json(submission)
+
+    # get responses to submission
+    responses = table_service.query_entities(
+        'response', filter=f"(PartitionKey eq '{templateId}') and (submission_id eq '{submissionId}')")
+    responses = [convert_table_response_to_json(response) for response in responses]
+
+    # get all users for ease
+    users = table_service.query_entities(
+        'user', filter="PartitionKey eq '" + templateId + "'")
+    users = [convert_table_user_to_short_json(user) for user in users]
+
+    user = next(user for user in users if user['user_id'] == submission['user_id'])
+    submission['user'] = user
+    for response in responses:
+        # raises StopIteration.  Letting it because I don't expect this to happen
+        user = next(user for user in users if user['user_id'] == response['user_id'])
+        response['user'] = user
+
+    submission['responses'] = responses
+
+    return jsonify(submission)
+
 def upload_photo():
     # Get photo and filename
     photoFile = request.files["photo"]
@@ -90,7 +145,7 @@ def upload_photo():
     
     return blob_client.url
 
-def text_others(userId, templateId):
+def text_others(userId, templateId, photo_url):
     table_service = get_table_service()
     users = table_service.query_entities(
         'user', filter="PartitionKey eq '" + templateId + "'")
@@ -98,13 +153,17 @@ def text_others(userId, templateId):
     othersUsers = [user for user in users if user['user_id'] != userId]
     user = next(user for user in users if user['user_id'] == userId)
     for otherUser in othersUsers:
-        message = "New submission from " + user['name'] + ".  Use your login link to check it out: " + build_login_link(otherUser['user_id'])
+        # message = "New submission from " + user['name'] + ".  Use your login link to check it out: " + build_login_link(otherUser['user_id'])
+        message = "New submission from " + user['name'] + ". " + photo_url + " respond with comment."
         send_text(otherUser['phone_number'], message)
 
 def convert_table_submission_to_json(submission):
-    return {
+    submission_json = {
         'template_id': submission['PartitionKey'],
         'submission_id': submission['RowKey'],
         'user_id': submission['user_id'],
         'photo_url': submission['photo_url']
     }
+    if 'chosen_response' in submission:
+        submission_json['chosen_response'] = submission['chosen_response']
+    return submission_json
