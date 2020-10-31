@@ -12,3 +12,5 @@ on git bash
 To run:
 export FLASK_APP=hello.py
 flask run
+
+<!-- or gunicorn --bind=0.0.0.0 --timeout 600 application:app -->

@@ -1,4 +1,4 @@
-import os, uuid
+import os, uuid, sys
 
 from flask import Flask, send_from_directory
 from flask_cors import CORS
@@ -20,9 +20,9 @@ def create_app(test_config=None):
         table_service = get_table_service()
         tables = ['user', 'submission', 'response']
         for table in tables:
-            print('Setting up "' + table + '" table.')
+            print('Setting up "' + table + '" table.', file=sys.stderr)
             try:
-                table_service.create_table('user')
+                table_service.create_table(table)
             except Exception as ex:
                 print(ex)
 
